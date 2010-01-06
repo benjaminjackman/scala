@@ -48,10 +48,13 @@ private[actors] class TransMQueue(protected val label: String) {
   }
 
   def printStats() {
-    queueMap.keys.foreach { key =>
+    println(queueMap.toString)
+    val keyIter = queueMap.keysIterator
+    while (keyIter.hasNext) {
+      val key = keyIter.next
       val box = queueMap(key)
       println(key+":"+box.size)
-                         }
+    }
   }
 
   def append(msg: Any, session: OutputChannel[Any]) {
@@ -69,6 +72,15 @@ private[actors] class TransMQueue(protected val label: String) {
     while (curr != null) {
       f(curr.msg, curr.session)
       curr = curr.next
+    }
+  }
+
+  def foreachTagged(f: (Any, OutputChannel[Any]) => Unit) {
+    val keyIter = queueMap.keysIterator
+    while (keyIter.hasNext) {
+      val key = keyIter.next
+      val box = queueMap(key)
+      box.foreach(f)
     }
   }
 
