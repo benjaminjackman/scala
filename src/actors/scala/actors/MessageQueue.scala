@@ -10,6 +10,8 @@
 
 package scala.actors
 
+import scala.collection.mutable.HashMap
+
 /**
  * This class is used by our efficient message queue
  * implementation.
@@ -45,11 +47,29 @@ private[actors] class MQueue(protected val label: String) {
   protected var last: MQueueElement = null  // last eq null iff list is empty
   private var _size = 0
   
+  private val queueMap = new HashMap[Class[T] forSome { type T }, MQueue]
+
   def size = _size
   final def isEmpty = last eq null
 
   protected def changeSize(diff: Int) {
     _size += diff
+  }
+
+  def append(msg: Any, session: OutputChannel[Any], trans: Boolean) {
+    if (trans) {
+      val msgClass = msg.asInstanceOf[AnyRef].getClass
+      queueMap.get(msgClass) match {
+        case None =>
+          val msgQueue = new MQueue(msgClass.toString)
+          msgQueue.append(msg, session)
+          queueMap += (msgClass -> msgQueue)
+
+        case Some(queue) =>
+          queue.append(msg, session)
+      }
+    } else
+      append(msg, session)
   }
 
   def append(msg: Any, session: OutputChannel[Any]) {
@@ -100,15 +120,51 @@ private[actors] class MQueue(protected val label: String) {
   /** Removes the n-th message that satisfies the predicate <code>p</code>.
    */
   def remove(n: Int)(p: (Any, OutputChannel[Any]) => Boolean): Option[(Any, OutputChannel[Any])] =
-    removeInternal(n)(p) map (x => (x.msg, x.session))
+    removeInternal(p)(n) map (x => (x.msg, x.session))
     
   /** Extracts the first message that satisfies the predicate <code>p</code>
    *  or <code>null</code> if <code>p</code> fails for all of them.
    */
   def extractFirst(p: (Any, OutputChannel[Any]) => Boolean): MQueueElement =
-    removeInternal(0)(p) orNull
+    removeInternal(p)(0) orNull
 
-  private def removeInternal(n: Int)(p: (Any, OutputChannel[Any]) => Boolean): Option[MQueueElement] = {
+  def extractFirst(pf: Any =>? Any): MQueueElement =
+    removeInternal(pf)(0) orNull
+
+/*
+  def extractFirst(p: (Any, OutputChannel[Any]) => Boolean, tf: TranslucentFunction[Any, Nothing]): MQueueElement =
+    removeInternal(p, tf)(0) orNull
+*/
+
+/*
+  private def removeInternal(p: (Any, OutputChannel[Any]) => Boolean, tf: TranslucentFunction[Any, Nothing])(n: Int): Option[MQueueElement] = {
+    val msgClass = p._1.getClass
+    removeInternal(p)(n)
+  }
+*/
+
+  private def removeInternal(pf: Any =>? Any)(n: Int): Option[MQueueElement] =
+/*
+    if (pf.isInstanceOf[TranslucentFunction[Any, Any]]) {
+      // iterate over classes for which function is defined
+      val transFun = pf.asInstanceOf[TranslucentFunction[Any, Any]]
+      val iter = transFun.definedFor.iterator
+      var finished = false
+      var res: Option[MQueueElement] = None
+      while (!finished && iter.hasNext) {
+        val clazz = iter.next
+        queueMap.get(clazz) match {
+          case None =>
+            // next iteration
+          case Some(queue) =>
+            val found = 
+          
+        }
+      }
+
+    } else*/ removeInternal((msg: Any, out: OutputChannel[Any]) => pf.isDefinedAt(msg))(n)
+
+  private def removeInternal(p: (Any, OutputChannel[Any]) => Boolean)(n: Int): Option[MQueueElement] = {
     var pos = 0
 
     def foundMsg(x: MQueueElement) = {        

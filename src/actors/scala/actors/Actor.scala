@@ -189,7 +189,7 @@ object Actor {
    * @return   this function never returns
    */
   def react(f: Any =>? Unit): Nothing =
-    rawSelf.react(f)
+    rawSelf.react(f.asInstanceOf[TranslucentFunction[Any, Unit]])
 
   /**
    * Lightweight variant of <code>receiveWithin</code>.
@@ -205,6 +205,7 @@ object Actor {
   def reactWithin(msec: Long)(f: Any =>? Unit): Nothing =
     self.reactWithin(msec)(f)
 
+/*
   def eventloop(f: Any =>? Unit): Nothing =
     rawSelf.react(new RecursiveProxyHandler(rawSelf, f))
 
@@ -217,6 +218,7 @@ object Actor {
       a.react(this)
     }
   }
+*/
 
   /**
    * Returns the actor which sent the last received message.
@@ -400,13 +402,13 @@ trait Actor extends AbstractActor with ReplyReactor with ReplyableActor {
 
   protected[actors] override def scheduler: IScheduler = Scheduler
 
-  private[actors] override def startSearch(msg: Any, replyTo: OutputChannel[Any], handler: Any => Boolean) =
+  private[actors] /*override*/ def startSearch(msg: Any, replyTo: OutputChannel[Any], handler: Any =>? Any) =
     if (isSuspended) {
       () => synchronized {
         mailbox.append(msg, replyTo)
         resumeActor()
       }
-    } else super.startSearch(msg, replyTo, handler)
+    } else super.startSearch(msg, replyTo, handler.asInstanceOf[TranslucentFunction[Any, Unit]])
 
   private[actors] override def makeReaction(fun: () => Unit): Runnable =
     new ActorTask(this, fun)
@@ -451,7 +453,7 @@ trait Actor extends AbstractActor with ReplyReactor with ReplyableActor {
             drainSendBuffer(mailbox)
             // keep going
           } else {
-            waitingFor = f.isDefinedAt
+            waitingFor = f.asInstanceOf[TranslucentFunction[Any, Unit]]
             isSuspended = true
             scheduler.managedBlock(blocker)
             drainSendBuffer(mailbox)
@@ -517,7 +519,7 @@ trait Actor extends AbstractActor with ReplyReactor with ReplyableActor {
             done = true
             receiveTimeout
           } else {
-            waitingFor = f.isDefinedAt
+            waitingFor = f.asInstanceOf[TranslucentFunction[Any, Unit]]
             received = None
             isSuspended = true
             val thisActor = this
@@ -559,14 +561,14 @@ trait Actor extends AbstractActor with ReplyReactor with ReplyableActor {
    *
    * @param  f    a partial function with message patterns and actions
    */
-  override def react(f: Any =>? Unit): Nothing = {
+  /*override*/ def react(f: Any =>? Unit): Nothing = {
     assert(Actor.self(scheduler) == this, "react on channel belonging to other actor")
     synchronized {
       if (shouldExit) exit() // links
       drainSendBuffer(mailbox)
     }
     continuation = f
-    searchMailbox(mailbox, f.isDefinedAt, false)
+    searchMailbox(mailbox, f.asInstanceOf[TranslucentFunction[Any, Unit]], false)
     throw Actor.suspendException
   }
 
@@ -616,7 +618,7 @@ trait Actor extends AbstractActor with ReplyReactor with ReplyableActor {
             done = true
             receiveTimeout
           } else {
-            waitingFor = f.isDefinedAt
+            waitingFor = f.asInstanceOf[TranslucentFunction[Any, Unit]]
             continuation = f
             val thisActor = this
             onTimeout = Some(new TimerTask {

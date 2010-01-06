@@ -62,15 +62,15 @@ trait ReplyReactor extends Reactor with ReplyableReactor {
   }
 
   // assume continuation != null
-  private[actors] override def searchMailbox(startMbox: MQueue,
-                                             handlesMessage: Any => Boolean,
+  private[actors] override def searchMailbox(startMbox: TransMQueue,
+                                             handler: TranslucentFunction[Any, Any],
                                              resumeOnSameThread: Boolean) {
     var tmpMbox = startMbox
     var done = false
     while (!done) {
       val qel = tmpMbox.extractFirst((msg: Any, replyTo: OutputChannel[Any]) => {
         senders = List(replyTo)
-        handlesMessage(msg)
+        handler.isDefinedAt(msg)
       })
       if (tmpMbox ne mailbox)
         tmpMbox.foreach((m, s) => mailbox.append(m, s))
@@ -78,11 +78,11 @@ trait ReplyReactor extends Reactor with ReplyableReactor {
         synchronized {
           // in mean time new stuff might have arrived
           if (!sendBuffer.isEmpty) {
-            tmpMbox = new MQueue("Temp")
+            tmpMbox = new TransMQueue("Temp")
             drainSendBuffer(tmpMbox)
             // keep going
           } else {
-            waitingFor = handlesMessage
+            waitingFor = handler.asInstanceOf[TranslucentFunction[Any, Unit]]
             done = true
           }
         }

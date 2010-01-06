@@ -57,10 +57,13 @@ private[actors] class ReactChannel[Msg](receiver: Reactor) extends InputChannel[
    */
   def react(f: Msg =>? Unit): Nothing = {
     val C = this
-    receiver.react {
-      case SendToReactor(C, msg) if (f.isDefinedAt(msg.asInstanceOf[Msg])) =>
-        f(msg.asInstanceOf[Msg])
-    }
+    receiver.react ({
+      val pf: PartialFunction[Any, Unit] = {
+        case SendToReactor(C, msg) if (f.isDefinedAt(msg.asInstanceOf[Msg])) =>
+          f(msg.asInstanceOf[Msg])
+      }
+      new TranslucentFunction(pf, List(classOf[SendToReactor]))
+    })
   }
 
   /**

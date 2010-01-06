@@ -119,7 +119,11 @@ class Channel[Msg](val receiver: Actor) extends InputChannel[Msg] with OutputCha
   def react(f: Msg =>? Unit): Nothing = {
     val C = this.asInstanceOf[Channel[Any]]
     receiver.react {
-      case C ! msg if (f.isDefinedAt(msg.asInstanceOf[Msg])) => f(msg.asInstanceOf[Msg])
+      val pf: PartialFunction[Any, Unit] = {
+        case C ! msg if (f.isDefinedAt(msg.asInstanceOf[Msg])) => f(msg.asInstanceOf[Msg])
+      }
+      pf
+      //new TranslucentFunction(pf, List(classOf[![Any]]))
     }
   }
 

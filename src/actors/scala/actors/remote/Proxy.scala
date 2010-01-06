@@ -123,7 +123,8 @@ private[remote] class DelegateActor(creator: Proxy, node: Node, name: Symbol, ke
 
   def act() {
     Actor.loop {
-      react {
+      react ({
+        val pf: PartialFunction[Any, Unit] = {
         case cmd@Apply0(rfun) =>
           kernel.remoteApply(node, name, sender, rfun)
 
@@ -185,6 +186,8 @@ private[remote] class DelegateActor(creator: Proxy, node: Node, name: Symbol, ke
             kernel.forward(sender, node, name, msg, 'nosession)
           }
       }
+        pf
+      })
     }
   }
 

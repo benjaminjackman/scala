@@ -6,33 +6,22 @@
 **                          |/                                          **
 \*                                                                      */
 
-// $Id$
+// $Id: Reactor.scala 20296 2009-12-22 20:11:29Z extempore $
 
 package scala.actors
 
 import scala.actors.scheduler.{DelegatingScheduler, DefaultThreadPoolScheduler}
 import scala.collection.mutable.Queue
 
-private object Reactor {
-  val scheduler = new DelegatingScheduler {
-    def makeNewScheduler: IScheduler = {
-      val s = new DefaultThreadPoolScheduler(false)
-      Debug.info(this+": starting new "+s+" ["+s.getClass+"]")
-      s.start()
-      s
-    }
-  }
-}
-
 /**
  * The Reactor trait provides lightweight actors.
  *
  * @author Philipp Haller
  */
-trait Reactor extends OutputChannel[Any] {
+trait TransReactor extends OutputChannel[Any] {
 
   /* The actor's mailbox. */
-  /*private[actors]*/ val mailbox = new TransMQueue("Reactor")
+  private[actors] val mailbox = new TransMQueue("Reactor")
 
   // guarded by this
   private[actors] val sendBuffer = new Queue[(Any, OutputChannel[Any])]
@@ -126,7 +115,7 @@ trait Reactor extends OutputChannel[Any] {
   def receiver: Actor = this.asInstanceOf[Actor]
 
   // guarded by this
-  private[actors] def drainSendBuffer(mbox: TransMQueue) {
+  private[actors] def drainSendBuffer(mbox: MQueue) {
     while (!sendBuffer.isEmpty) {
       val item = sendBuffer.dequeue()
       mbox.appendTagged(item._1, item._2)
@@ -134,7 +123,7 @@ trait Reactor extends OutputChannel[Any] {
   }
 
   // assume continuation != null
-  private[actors] def searchMailbox(startMbox: TransMQueue,
+  private[actors] def searchMailbox(startMbox: MQueue,
                                     handler: TranslucentFunction[Any, Any],
                                     resumeOnSameThread: Boolean) {
     var tmpMbox = startMbox
@@ -147,7 +136,7 @@ trait Reactor extends OutputChannel[Any] {
         synchronized {
           // in mean time new stuff might have arrived
           if (!sendBuffer.isEmpty) {
-            tmpMbox = new TransMQueue("Temp")
+            tmpMbox = new MQueue("Temp")
             drainSendBuffer(tmpMbox)
             // keep going
           } else {
@@ -175,7 +164,7 @@ trait Reactor extends OutputChannel[Any] {
    *
    * assume handler != null
    */
-  private[actors] def scheduleActor(handler: Any =>? Unit, msg: Any) = {
+  private[actors] def scheduleActor(handler: TranslucentFunction[Any, Unit], msg: Any) = {
     val fun = () => handler(msg)
     val task = new ReactorTask(this, fun)
     scheduler executeFromActor task
