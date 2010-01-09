@@ -132,6 +132,7 @@ trait Definitions {
     // fundamental reference classes
     lazy val ScalaObjectClass     = getClass("scala.ScalaObject")
     lazy val PartialFunctionClass = getClass("scala.PartialFunction")
+    lazy val TranslucentFunctionClass = getClass("scala.TranslucentFunction")
     lazy val SymbolClass          = getClass("scala.Symbol")
     lazy val StringClass          = getClass(sn.String)
     lazy val ClassClass           = getClass(sn.Class)

@@ -1983,22 +1983,28 @@ trait Typers { self: Analyzer =>
      */
     def typedFunction(fun: Function, mode: Int, pt: Type): Tree = {
       val codeExpected = !forMSIL && (pt.typeSymbol isNonBottomSubClass CodeClass)
-      
+      val translucentExpected = pt.typeSymbol isNonBottomSubClass TranslucentFunctionClass
+
       if (fun.vparams.length > definitions.MaxFunctionArity)
         return errorTree(fun, "implementation restricts functions to " + definitions.MaxFunctionArity + " parameters")
 
       def decompose(pt: Type): (Symbol, List[Type], Type) =
         if ((isFunctionType(pt)
              || 
-             pt.typeSymbol == PartialFunctionClass && 
+             (pt.typeSymbol == PartialFunctionClass ||
+              pt.typeSymbol == TranslucentFunctionClass) && 
              fun.vparams.length == 1 && fun.body.isInstanceOf[Match]) 
              && // see bug901 for a reason why next conditions are neeed
             (pt.normalize.typeArgs.length - 1 == fun.vparams.length 
              || 
-             fun.vparams.exists(_.tpt.isEmpty)))
-          (pt.typeSymbol, pt.normalize.typeArgs.init, pt.normalize.typeArgs.last)
-        else
+             fun.vparams.exists(_.tpt.isEmpty))) {
+          (if (pt.typeSymbol == TranslucentFunctionClass)
+            PartialFunctionClass
+           else
+            pt.typeSymbol, pt.normalize.typeArgs.init, pt.normalize.typeArgs.last)
+        } else {
           (FunctionClass(fun.vparams.length), fun.vparams map (x => NoType), WildcardType)
+        }
 
       val (clazz, argpts, respt) = decompose(if (codeExpected) pt.normalize.typeArgs.head else pt)
 
@@ -2051,6 +2057,21 @@ trait Typers { self: Analyzer =>
         if (codeExpected) {
           val liftPoint = Apply(Select(Ident(CodeModule), nme.lift_), List(fun1))
           typed(atPos(fun.pos)(liftPoint))
+        } else if (translucentExpected) {
+          val pfName = unit.fresh.newName(fun.pos, "pf")
+          val sym = context.owner.newValue(fun.pos, pfName).setFlag(SYNTHETIC).setInfo(funtpe)
+          val firstExpr = typed(atPos(fun.pos)(ValDef(sym, fun1)))
+
+          enterSym(context, Ident(sym))
+          if (context.retyping) context.scope enter sym
+
+          val transArgs = List(Ident(sym), Apply(Select(Ident("List"), definitions.List_apply), List()))
+
+          val createTrans = typed(atPos(fun.pos)
+            (Apply(Select(New(Ident("TranslucentFunction".toTypeName)), nme.CONSTRUCTOR), transArgs)))
+
+          val transFunTpe = typeRef(pt.typeSymbol.tpe.prefix, pt.typeSymbol, formals ::: List(restpe))
+          treeCopy.Block(fun, List(firstExpr), createTrans).setType(transFunTpe)
         } else fun1
       }
     }
