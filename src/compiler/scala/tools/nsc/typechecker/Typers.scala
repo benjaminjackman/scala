@@ -2065,7 +2065,19 @@ trait Typers { self: Analyzer =>
           enterSym(context, Ident(sym))
           if (context.retyping) context.scope enter sym
 
-          val transArgs = List(Ident(sym), Apply(Select(Ident("List"), definitions.List_apply), List()))
+          // generate info about classes occuring in match
+          val matchTree = fun1.body.asInstanceOf[Match]
+          val caseTypes = matchTree.cases map {
+            case CaseDef(pat, guard, body) => pat.tpe
+          }
+          val classOfTrees = caseTypes map { caseTpe =>
+            TypeApply(
+              Select(Ident(definitions.PredefModule), definitions.Predef_classOf),
+              List(Ident(caseTpe.typeSymbol))
+            )
+          }
+
+          val transArgs = List(Ident(sym), Apply(Select(Ident("List"), definitions.List_apply), classOfTrees))
 
           val createTrans = typed(atPos(fun.pos)
             (Apply(Select(New(Ident("TranslucentFunction".toTypeName)), nme.CONSTRUCTOR), transArgs)))
