@@ -1,22 +1,32 @@
-import scala.actors.Reactor
+import scala.actors.{Actor, Reactor, OutputChannel}
+import Actor._
+import scala.collection.mutable.Queue
 
-object ProducerConsumer extends Benchmark {
+object ProducerConsumerExplicitCompose extends Benchmark {
   case class Stop()
   case class Get(from: Reactor)
   case class Put(x: Int)
 
   class UnboundedBuffer extends Reactor {
+    val putQ = new Queue[Int]
+    val getQ = new Queue[OutputChannel[Any]]
+
     def act() {
-      react {
-        case Stop() =>
+      loop { react {
+        case Stop() => this.exit()
+
         case Get(from) =>
-          val consumer = from
-          react {
-            case msg @ Put(x) =>
-              consumer ! msg
-              act()
-          }
-      }
+          if (putQ.isEmpty)
+            getQ.enqueue(from)
+          else
+            from ! Put(putQ.dequeue)
+
+        case Put(x) =>
+          if (getQ.isEmpty)
+            putQ.enqueue(x)
+          else
+            getQ.dequeue ! Put(x)
+      } }
     }
   }
 
@@ -33,10 +43,10 @@ object ProducerConsumer extends Benchmark {
   }
 
   class Consumer(buf: UnboundedBuffer, n: Int, delay: Long, parent: Reactor) extends Reactor {
-    val step = n / 10
-    var i = 0
     def act() {
-      if (i < n) {
+      val step = n / 10
+      var i = 0
+      loopWhile (i < n) {
         i += 1
         if (delay > 0) Thread.sleep(delay)
         buf ! Get(this)
@@ -44,9 +54,8 @@ object ProducerConsumer extends Benchmark {
           case Put(res) =>
             if (i % step == 0)
               print("X")
-            act()
         }
-      } else {
+      } andThen {
         println(".")
         parent ! Stop()
       }

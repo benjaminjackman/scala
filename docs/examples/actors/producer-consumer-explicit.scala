@@ -69,9 +69,9 @@ object ProducerConsumerExplicit {
     actor {
       val buffer = new UnboundedBuffer
       buffer.start()
-      val producer = new Producer(buffer, 10000, 0, self)
+      val producer = new Producer(buffer, 20000, 0, self)
       producer.start()
-      val consumer = new Consumer(buffer, 10000, 0, self)
+      val consumer = new Consumer(buffer, 20000, 0, self)
       consumer.start()
       react {
         case Stop => react { case Stop =>

@@ -1,0 +1,36 @@
+echo $JAVA_OPTS
+-Xms512m -Xmx512m
+
+time scala -cp classes-trans/ TCBenchmark producer-consumer 500000 5000000 500000
+final results: 22501 32100 45300 55327 68139 75433 92711 104026 109749 122375
+
+real	72m50.251s
+user	75m1.805s
+sys	4m20.792s
+
+ratio last/first = 5.439
+
+time scala -cp classes TCBenchmark producer-consumer 10000 100000 10000
+final results: 3769 11130 13208 19145 26614 38715 44630 56987 72559 86478
+
+real ~27m
+
+ratio last/first = 22.945
+
+time scala -cp classes-trans/ TCBenchmark producer-consumer 10000 100000 10000
+final results: 250 492 724 678 853 1394 1263 2310 1359 1519
+
+real	1m5.642s
+user	1m5.272s
+sys	0m2.076s
+
+ratio last/first = 6.076
+
+time scala -cp classes-trans/ TCBenchmark producer-consumer 10000 50000 10000
+final results: 276 374 723 764 737
+
+real	0m19.604s
+user	0m19.713s
+sys	0m0.660s
+
+
