@@ -26,6 +26,8 @@ private[actors] class TransMQueue(protected val label: String) {
   private var cnt = 0
   def nextTime = { cnt += 1; cnt }
 
+  def this() = this("")
+
   def size = _size
   final def isEmpty = last eq null
 
@@ -36,15 +38,11 @@ private[actors] class TransMQueue(protected val label: String) {
   def appendTagged(msg: Any, session: OutputChannel[Any]) {
     val msgClass = msg.asInstanceOf[AnyRef].getClass
 //    println("appending (class of "+msg+" is "+msgClass+")")
-    queueMap.get(msgClass) match {
-      case None =>
-        val msgQueue = new TransMQueue(msgClass.toString)
-        msgQueue.append(msg, session)
-        queueMap += (msgClass -> msgQueue)
-
-      case Some(queue) =>
-        queue.append(msg, session)
-    }
+    /* if there is no queue for msgClass in queueMap, then
+       either msgClass is not a case class or it has not yet been
+       tried to received. In this case, append to global queue (this). */
+    val queue = queueMap.getOrElse(msgClass, this)
+    queue.append(msg, session)
   }
 
   def printStats() {
@@ -59,12 +57,22 @@ private[actors] class TransMQueue(protected val label: String) {
 
   def append(msg: Any, session: OutputChannel[Any]) {
     changeSize(1) // size always increases by 1
+    // overhead compared to non-translucent version: compute `nextTime`.
     val el = new TransMQueueElement(msg, session, nextTime)
 
     if (isEmpty) first = el
     else last.next = el
-    
+
     last = el
+  }
+
+  def append(elem: TransMQueueElement) {
+    changeSize(1) // size always increases by 1
+
+    if (isEmpty) first = elem
+    else last.next = elem
+
+    last = elem
   }
 
   def foreach(f: (Any, OutputChannel[Any]) => Unit) {
@@ -75,6 +83,34 @@ private[actors] class TransMQueue(protected val label: String) {
     }
   }
 
+  /* Traverses this queue moving each element whose msg field has class `clss`
+   * to queue `target`. Uses efficient method to append directly `TransMQueueElement`s.
+   */
+  def moveClassTo(clss: Class[_], target: TransMQueue) {
+    // special case first element
+    while (first != null && first.msg.asInstanceOf[AnyRef].getClass == clss) {
+      val next = first.next
+      first.next = null
+      target append first
+      first = next
+    }
+
+    if (first != null) {
+      var prev = first
+      var curr = first.next
+      while (curr != null) {
+        if (curr.msg.asInstanceOf[AnyRef].getClass == clss) {
+          val next = curr.next
+          curr.next = null
+          target append curr
+          prev.next = next
+        }
+        prev = curr
+        curr = curr.next
+      }
+    }
+  }
+
   def foreachTagged(f: (Any, OutputChannel[Any]) => Unit) {
     val keyIter = queueMap.keysIterator
     while (keyIter.hasNext) {
@@ -82,6 +118,7 @@ private[actors] class TransMQueue(protected val label: String) {
       val box = queueMap(key)
       box.foreach(f)
     }
+    this.foreach(f)
   }
 
   def foldLeft[B](z: B)(f: (B, Any) => B): B = {
@@ -124,8 +161,48 @@ private[actors] class TransMQueue(protected val label: String) {
   def extractFirst(p: (Any, OutputChannel[Any]) => Boolean): TransMQueueElement =
     removeInternal(p, Integer.MAX_VALUE)(0) orNull
 
-  def extractFirst(tf: TranslucentFunction[Any, Any]): TransMQueueElement =
-    removeInternal(tf)(0) orNull
+  def extractFirst(tf: TranslucentFunction[Any, Any]): TransMQueueElement = {
+    var bestQueue: TransMQueue = null
+    var earliest = Integer.MAX_VALUE
+
+    if (tf.definedFor.isEmpty) { //TODO: replace with faster instanceof test?
+      // (a) search through global queue (this)
+      val found = this.findInternal(tf, earliest)
+      if (!found.isEmpty) {
+        bestQueue = this
+        earliest = found.get.time
+      }
+      // (b) search through all other queues
+      queueMap.values.foreach { queue =>
+        val found = queue.findInternal(tf, earliest)
+        if (!found.isEmpty) {
+          bestQueue = queue
+          earliest = found.get.time
+        }
+      }
+    } else tf.definedFor.foreach(clazz => {
+      // Step 1: make sure for all classes in tf.definedFor exist separate queues
+      // if necessary move messages from global queue (this) to new separate queues
+      val queue = queueMap.getOrElse(clazz, {
+        val newQueue = new TransMQueue
+        moveClassTo(clazz, newQueue) // traverses global queue (this), moves messages
+        queueMap += (clazz -> newQueue)
+        newQueue
+      })
+      //TODO: make findInternal return Nullable instead of Option
+      //TODO: return also position in queue, then we can speed up removal
+      val found = queue.findInternal(tf, earliest)
+      if (!found.isEmpty) {
+        bestQueue = queue
+        earliest = found.get.time
+      }
+    })
+
+    if (bestQueue != null)
+      bestQueue.removeInternal(tf, earliest)
+    else
+      null
+  }
 
 /*
   def extractFirst(p: (Any, OutputChannel[Any]) => Boolean, tf: TranslucentFunction[Any, Nothing]): MQueueElement =
@@ -138,32 +215,6 @@ private[actors] class TransMQueue(protected val label: String) {
     removeInternal(p)(n)
   }
 */
-
-  private def removeInternal(tf: TranslucentFunction[Any, Any])(n: Int): Option[TransMQueueElement] = {
-    // iterate over classes for which function is defined
-    val iter = tf.definedFor.iterator
-    var bestQueue: TransMQueue = null
-    var earliest = Integer.MAX_VALUE
-    while (iter.hasNext) {
-      val clazz = iter.next
-//      println("looking up messages in queue for "+clazz)
-      queueMap.get(clazz) match {
-        case None =>
-          /* do nothing */
-        case Some(queue) =>
-          // TODO: return also position in queue, then we can speed up removal
-          val found = queue.findInternal((m: Any, o: OutputChannel[Any]) => tf.isDefinedAt(m), earliest)(0)
-          if (!found.isEmpty) {
-            bestQueue = queue
-            earliest = found.get.time
-          }
-      }
-    }
-    if (bestQueue != null)
-      bestQueue.removeInternal((m: Any, o: OutputChannel[Any]) => tf.isDefinedAt(m), earliest)(0)
-    else
-      None
-  }
 
   private def removeInternal(p: (Any, OutputChannel[Any]) => Boolean, notLater: Int)(n: Int): Option[TransMQueueElement] = {
     var pos = 0
@@ -213,6 +264,50 @@ private[actors] class TransMQueue(protected val label: String) {
     }
   }
 
+  private def removeInternal(pf: PartialFunction[Any, Any], notLater: Int): TransMQueueElement = {
+    def foundMsg(x: TransMQueueElement) = {        
+      changeSize(-1)
+      x
+    }
+
+    if (isEmpty)    // early return
+      return null
+    
+    // special handling if returning the head
+    if (first.time > notLater)
+      null
+    else if (pf.isDefinedAt(first.msg)) {
+      val res = first
+      first = first.next
+      if (res eq last)
+        last = null
+      
+      foundMsg(res)
+    }
+    else {
+      var curr = first.next   // init to element #2
+      var prev = first
+      
+      while (curr != null) {
+        if (curr.time > notLater)
+          return null
+        else if (pf.isDefinedAt(curr.msg)) {
+          prev.next = curr.next
+          if (curr eq last)
+            last = prev
+            
+          return foundMsg(curr) // early return
+        }
+        else {
+          prev = curr
+          curr = curr.next
+        }
+      }
+      // not found
+      null
+    }
+  }
+
   private def findInternal(p: (Any, OutputChannel[Any]) => Boolean, notLater: Int)(n: Int): Option[TransMQueueElement] = {
     var pos = 0
 
@@ -240,6 +335,36 @@ private[actors] class TransMQueue(protected val label: String) {
           return None
         else if (test(curr.msg, curr.session)) {
           return foundMsg(curr) // early return
+        }
+        else {
+          prev = curr
+          curr = curr.next
+        }
+      }
+      // not found
+      None
+    }
+  }
+
+  private def findInternal(pf: PartialFunction[Any, Any], notLater: Int): Option[TransMQueueElement] = {
+    if (isEmpty)    // early return
+      return None
+    
+    // special handling if returning the head
+    if (first.time > notLater)
+      None
+    else if (pf.isDefinedAt(first.msg)) {
+      Some(first)
+    }
+    else {
+      var curr = first.next   // init to element #2
+      var prev = first
+      
+      while (curr != null) {
+        if (curr.time > notLater)
+          return None
+        else if (pf.isDefinedAt(curr.msg)) {
+          return Some(curr) // early return
         }
         else {
           prev = curr

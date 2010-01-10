@@ -50,7 +50,7 @@ trait Reactor extends OutputChannel[Any] {
    * waitingForNone, this Actor is guaranteed not to execute on some
    * thread.
    */
-  private[actors] val waitingForNone = new TranslucentFunction[Any, Unit](new PartialFunction[Any, Unit] {
+  private[actors] val waitingForNone = new TranslucentFunctionWrapper[Any, Unit](new PartialFunction[Any, Unit] {
     def isDefinedAt(x: Any) = false
     def apply(x: Any) {}
   }, List())
