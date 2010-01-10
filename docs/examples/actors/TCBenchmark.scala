@@ -1,18 +1,14 @@
 import scala.actors.Reactor
 import scala.actors.Actor._
 
-trait Benchmark {
-  def run(input: Int, whenFinished: Reactor): Unit
-}
-
-case class Finished()
-
 object TCBenchmark {
 
   def invokeBenchmark(which: String, input: Int, parent: Reactor) = {
     val benchmark = which match {
       case "producer-consumer" => ProducerConsumer
+      case "producer-consumer-explicit" => ProducerConsumerExplicit
       case "producer-consumer-explicit-compose" => ProducerConsumerExplicitCompose
+//      case "producer-consumer-cached" => ProducerConsumerCached
     }
     benchmark.run(input, parent)
   }

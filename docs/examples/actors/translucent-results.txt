@@ -17,6 +17,13 @@ real ~27m
 
 ratio last/first = 22.945
 
+time scala -cp classes TCBenchmark producer-consumer-explicit 10000 100000 10000
+final results: 182 305 396 542 646 810 871 968 1120 1139
+
+real	0m45.012s
+user	0m46.231s
+sys	0m3.040s
+
 time scala -cp classes-trans/ TCBenchmark producer-consumer 10000 100000 10000
 final results: 250 492 724 678 853 1394 1263 2310 1359 1519
 
@@ -25,6 +32,47 @@ user	1m5.272s
 sys	0m2.076s
 
 ratio last/first = 6.076
+
+with general pattern matching support (non-sealed classes etc.):
+time scala -cp classes-uncurry/ TCBenchmark producer-consumer 10000 100000 10000
+final results: 275 433 900 864 1117 1256 1516 2065 2174 1585
+
+real	1m14.166s
+user	1m13.777s
+sys	0m1.796s
+
+ratio last/first = 5.764
+
+time scala -cp classes-uncurry/ TCBenchmark producer-consumer 10000 100000 10000
+final results: 283 456 831 981 826 1305 1099 1549 1654 1873
+
+real	1m9.863s
+user	1m9.564s
+sys	0m1.800s
+
+with internal val _definedFor:
+1. run:
+final results: 287 466 642 934 1203 1308 1438 1488 2162 2086
+
+real	1m16.948s
+user	1m16.673s
+sys	0m1.904s
+
+2. run:
+final results: 275 457 583 691 1182 1535 1272 1347 1666 1858
+
+real	1m13.259s
+user	1m12.973s
+sys	0m1.560s
+
+ratio last/first = 6.756
+
+with translucent closures cached:
+final results: 315 458 575 795 1206 1527 1582 1988 1923 2242
+
+real	1m17.684s
+user	1m17.417s
+sys	0m1.852s
 
 time scala -cp classes-trans/ TCBenchmark producer-consumer 10000 50000 10000
 final results: 276 374 723 764 737

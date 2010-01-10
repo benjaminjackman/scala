@@ -1,0 +1,25 @@
+scala -cp classes test.PerformanceTest
+===========================================
+== Benchmark Akka Actors vs Scala Actors ==
+	Nr of messages:	2000000
+	Nr of actors:	4
+	Scala Actors:	16634	 milliseconds
+===========================================
+
+scala -cp classes test.ChameneosReactor
+===========================================
+== Benchmark Akka Actors vs Scala Actors ==
+	Nr of messages:	2000000
+	Nr of actors:	4
+	Scala Actors:	38071	 milliseconds
+===========================================
+
+scala -cp classes-2.7/ test.PerformanceTest
+===========================================
+== Benchmark Akka Actors vs Scala Actors ==
+	Nr of messages:	2000000
+	Nr of actors:	4
+	Scala Actors:	49237	 milliseconds
+===========================================
+
+

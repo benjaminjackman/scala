@@ -1,33 +1,25 @@
-import scala.actors.{Reactor, OutputChannel}
-import scala.collection.mutable.Queue
+import scala.actors.Reactor
 
-object ProducerConsumerExplicit extends Benchmark {
+object ProducerConsumerCached extends Benchmark {
   case class Stop()
   case class Get(from: Reactor)
   case class Put(x: Int)
 
   class UnboundedBuffer extends Reactor {
-    val putQ = new Queue[Int]
-    val getQ = new Queue[OutputChannel[Any]]
-
+    var consumer: Reactor = _
+    val inner: TranslucentFunction[Any, Unit] = {
+      case msg @ Put(x) =>
+        consumer ! msg
+        act()
+    }
+    val outer: TranslucentFunction[Any, Unit] = {
+      case Stop() =>
+      case Get(from) =>
+        consumer = from
+        react(inner)
+    }
     def act() {
-      react {
-        case Stop() =>
-
-        case Get(from) =>
-          if (putQ.isEmpty)
-            getQ.enqueue(from)
-          else
-            from ! Put(putQ.dequeue)
-          act()
-
-        case Put(x) =>
-          if (getQ.isEmpty)
-            putQ.enqueue(x)
-          else
-            getQ.dequeue ! Put(x)
-          act()
-      }
+      react(outer)
     }
   }
 
