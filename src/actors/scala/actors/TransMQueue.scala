@@ -16,17 +16,18 @@ private[actors] class TransMQueueElement(val msg: Any, val session: OutputChanne
   def this(msg: Any, session: OutputChannel[Any], time: Int) = this(msg, session, time, null)
 }
 
-private[actors] class TransMQueue(protected val label: String) {
+private[actors] class TransMQueue(protected val label: String, var count: Int) {
   protected var first: TransMQueueElement = null
   protected var last: TransMQueueElement = null  // last eq null iff list is empty
   private var _size = 0
   
-  private val queueMap = new HashMap[Class[T] forSome { type T }, TransMQueue]
+  protected val queueMap = new HashMap[Class[T] forSome { type T }, TransMQueue]
 
-  private var cnt = 0
-  def nextTime = { cnt += 1; cnt }
+  def nextTime = { count += 1; count }
 
-  def this() = this("")
+  def this(initCount: Int) = this("", initCount)
+  def this(name: String) = this(name, 0)
+  def this() = this("", 0)
 
   def size = _size
   final def isEmpty = last eq null
@@ -42,7 +43,37 @@ private[actors] class TransMQueue(protected val label: String) {
        either msgClass is not a case class or it has not yet been
        tried to received. In this case, append to global queue (this). */
     val queue = queueMap.getOrElse(msgClass, this)
-    queue.append(msg, session)
+    queue.append(msg, session, nextTime)
+  }
+
+  def append(other: TransMQueue) {
+    if (!other.isEmpty) {
+      if (isEmpty)
+        first = other.first
+      else
+        last.next = other.first
+      last = other.last
+      changeSize(other.size)
+    }
+  }
+
+  // assume that all queue classes of `other` also exist in `this`
+  def appendTagged(other: TransMQueue) {
+    try {
+      // append global queues
+      this.append(other)
+      this.count = other.count
+
+      // append queues of `other` to queues of `this`
+      val keyIter = other.queueMap.keysIterator
+      while (keyIter.hasNext) {
+        val key = keyIter.next
+        val queue = other.queueMap(key)
+        queueMap(key).append(queue)
+      }
+    } catch {
+      case e: Exception => e.printStackTrace()
+    }
   }
 
   def printStats() {
@@ -59,19 +90,23 @@ private[actors] class TransMQueue(protected val label: String) {
     changeSize(1) // size always increases by 1
     // overhead compared to non-translucent version: compute `nextTime`.
     val el = new TransMQueueElement(msg, session, nextTime)
-
     if (isEmpty) first = el
     else last.next = el
+    last = el
+  }
 
+  def append(msg: Any, session: OutputChannel[Any], time: Int) {
+    changeSize(1) // size always increases by 1
+    val el = new TransMQueueElement(msg, session, time)
+    if (isEmpty) first = el
+    else last.next = el
     last = el
   }
 
   def append(elem: TransMQueueElement) {
     changeSize(1) // size always increases by 1
-
     if (isEmpty) first = elem
     else last.next = elem
-
     last = elem
   }
 
@@ -164,25 +199,10 @@ private[actors] class TransMQueue(protected val label: String) {
   def extractFirst(tf: TranslucentFunction[Any, Any]): TransMQueueElement = {
     var bestQueue: TransMQueue = null
     var earliest = Integer.MAX_VALUE
+    val defFor = tf.definedFor
 
-    if (tf.definedFor.isEmpty) { //TODO: replace with faster instanceof test?
-      // (a) search through global queue (this)
-      val found = this.findInternal(tf, earliest)
-      if (!found.isEmpty) {
-        bestQueue = this
-        earliest = found.get.time
-      }
-      // (b) search through all other queues
-      queueMap.values.foreach { queue =>
-        val found = queue.findInternal(tf, earliest)
-        if (!found.isEmpty) {
-          bestQueue = queue
-          earliest = found.get.time
-        }
-      }
-    } else tf.definedFor.foreach(clazz => {
-      // Step 1: make sure for all classes in tf.definedFor exist separate queues
-      // if necessary move messages from global queue (this) to new separate queues
+    if (defFor.isInstanceOf[Class[_]]) {
+      val clazz = defFor.asInstanceOf[Class[_]]
       val queue = queueMap.getOrElse(clazz, {
         val newQueue = new TransMQueue
         moveClassTo(clazz, newQueue) // traverses global queue (this), moves messages
@@ -196,7 +216,41 @@ private[actors] class TransMQueue(protected val label: String) {
         bestQueue = queue
         earliest = found.get.time
       }
-    })
+    } else {
+      val defForList = defFor.asInstanceOf[List[Class[_]]]
+      if (defForList.isEmpty) { //TODO: replace with faster instanceof test?
+        // (a) search through global queue (this)
+        val found = this.findInternal(tf, earliest)
+        if (!found.isEmpty) {
+          bestQueue = this
+          earliest = found.get.time
+        }
+        // (b) search through all other queues
+        queueMap.values.foreach { queue =>
+          val found = queue.findInternal(tf, earliest)
+                                 if (!found.isEmpty) {
+                                   bestQueue = queue
+                                   earliest = found.get.time
+                                 }
+                               }
+      } else defForList.foreach(clazz => {
+        // Step 1: make sure for all classes in tf.definedFor exist separate queues
+        // if necessary move messages from global queue (this) to new separate queues
+        val queue = queueMap.getOrElse(clazz, {
+          val newQueue = new TransMQueue
+          moveClassTo(clazz, newQueue) // traverses global queue (this), moves messages
+          queueMap += (clazz -> newQueue)
+          newQueue
+        })
+        //TODO: make findInternal return Nullable instead of Option
+        //TODO: return also position in queue, then we can speed up removal
+        val found = queue.findInternal(tf, earliest)
+        if (!found.isEmpty) {
+          bestQueue = queue
+          earliest = found.get.time
+        }
+      })
+    }
 
     if (bestQueue != null)
       bestQueue.removeInternal(tf, earliest)

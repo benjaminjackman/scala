@@ -96,7 +96,7 @@ trait Reactor extends OutputChannel[Any] {
 
   private[actors] def startSearch(msg: Any, replyTo: OutputChannel[Any], handler: TranslucentFunction[Any, Any]) =
     () => scheduler execute (makeReaction(() => {
-      val startMbox = new TransMQueue("Start")
+      val startMbox = new TransMQueue(mailbox.count)
       synchronized { startMbox.appendTagged(msg, replyTo) }
       searchMailbox(startMbox, handler, true)
     }))
@@ -152,11 +152,12 @@ trait Reactor extends OutputChannel[Any] {
       val qel = tmpMbox.extractFirst(handler)
       if (tmpMbox ne mailbox)
         tmpMbox.foreachTagged((m, s) => mailbox.appendTagged(m, s))
+//        mailbox.appendTagged(tmpMbox)
       if (null eq qel) {
         synchronized {
           // in mean time new stuff might have arrived
           if (!sendBuffer.isEmpty) {
-            tmpMbox = new TransMQueue("Temp")
+            tmpMbox = new TransMQueue(mailbox.count)
             drainSendBuffer(tmpMbox)
             // keep going
           } else {

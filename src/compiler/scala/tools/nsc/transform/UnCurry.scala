@@ -393,7 +393,10 @@ abstract class UnCurry extends InfoTransform with TypingTransformers {
               List(Ident(caseTpe.typeSymbol))
             )
           }
-          val classOfList = Apply(Select(Ident("List"), definitions.List_apply), classOfTrees)
+          val classOfList = if (classOfTrees.size == 1)
+            classOfTrees(0)
+          else
+            Apply(Select(Ident("List"), definitions.List_apply), classOfTrees)
 
           val valmem = ValDef(Modifiers(FINAL), "_definedFor", TypeTree(definedForResType), classOfList) setSymbol definedForValue
           val defmem = DefDef(Modifiers(FINAL), "definedFor", List(), List(), TypeTree(definedForResType), Select(This(anonClass), definedForValue)) setSymbol definedForMethod

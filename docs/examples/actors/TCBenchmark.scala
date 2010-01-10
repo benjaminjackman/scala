@@ -21,6 +21,7 @@ object TCBenchmark {
       val inputTo =   args(2).toInt
       val step =      args(3).toInt
       var medians =   List[Long]()
+      var ratios =    List[Long]()
       def act() {
         var input = inputFrom
         loopWhile (input <= inputTo) {
@@ -43,9 +44,11 @@ object TCBenchmark {
             val sorted = results.sort((x, y) => x < y)
             println("run results: "+results.mkString(", ")+" - median: "+sorted(2))
             medians = medians ::: List(sorted(2))
+            ratios = ratios ::: List(input / sorted(2))
           }
         } andThen {
-          println("final results: "+medians.mkString(" "))
+          println("final times:  "+medians.mkString(" "))
+          println("final ratios: "+ratios.mkString(" "))
         }
       }
     }

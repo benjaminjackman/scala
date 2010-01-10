@@ -1,6 +1,7 @@
 echo $JAVA_OPTS
 -Xms512m -Xmx512m
 
+(1)
 time scala -cp classes-trans/ TCBenchmark producer-consumer 500000 5000000 500000
 final results: 22501 32100 45300 55327 68139 75433 92711 104026 109749 122375
 
@@ -10,6 +11,7 @@ sys	4m20.792s
 
 ratio last/first = 5.439
 
+(2) Beta1
 time scala -cp classes TCBenchmark producer-consumer 10000 100000 10000
 final results: 3769 11130 13208 19145 26614 38715 44630 56987 72559 86478
 
@@ -17,6 +19,7 @@ real ~27m
 
 ratio last/first = 22.945
 
+(3) Explicit
 time scala -cp classes TCBenchmark producer-consumer-explicit 10000 100000 10000
 final results: 182 305 396 542 646 810 871 968 1120 1139
 
@@ -24,6 +27,7 @@ real	0m45.012s
 user	0m46.231s
 sys	0m3.040s
 
+(4)
 time scala -cp classes-trans/ TCBenchmark producer-consumer 10000 100000 10000
 final results: 250 492 724 678 853 1394 1263 2310 1359 1519
 
@@ -33,6 +37,7 @@ sys	0m2.076s
 
 ratio last/first = 6.076
 
+(5) Translucent
 with general pattern matching support (non-sealed classes etc.):
 time scala -cp classes-uncurry/ TCBenchmark producer-consumer 10000 100000 10000
 final results: 275 433 900 864 1117 1256 1516 2065 2174 1585
@@ -42,6 +47,14 @@ user	1m13.777s
 sys	0m1.796s
 
 ratio last/first = 5.764
+
+(6) Translucent, Explicit
+time scala -cp classes-uncurry TCBenchmark producer-consumer-explicit 10000 100000 10000
+final results: 230 426 551 711 840 1317 1823 1877 2084 2059
+
+real	1m17.481s
+user	1m18.153s
+sys	0m1.532s
 
 time scala -cp classes-uncurry/ TCBenchmark producer-consumer 10000 100000 10000
 final results: 283 456 831 981 826 1305 1099 1549 1654 1873
@@ -81,4 +94,21 @@ real	0m19.604s
 user	0m19.713s
 sys	0m0.660s
 
+(8) Translucent, Explicit (new, optimized numbers, BUGGY)
+time scala -cp classes-uncurry TCBenchmark producer-consumer-explicit 10000 100000 10000
+final times:  206 329 584 644 762 1087 877 967 1290 1300
+final ratios: 97 91 68 77 78 64 91 93 77 84
+
+real	0m53.053s
+user	0m53.259s
+sys	0m1.460s
+
+(9)
+time scala -cp classes-uncurry TCBenchmark producer-consumer 10000 100000 10000
+final times:  297 386 543 732 844 1033 961 1501 1239 1868
+final ratios: 67 77 73 68 71 67 83 59 80 58
+
+real	0m58.954s
+user	0m59.420s
+sys	0m1.820s
 
