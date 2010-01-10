@@ -321,6 +321,7 @@ abstract class UnCurry extends InfoTransform with TypingTransformers {
       def owner = fun.symbol.owner
       def targs = fun.tpe.typeArgs
       def isPartial = fun.tpe.typeSymbol == PartialFunctionClass
+      def isTranslucent = fun.tpe.typeSymbol == TranslucentFunctionClass
       
       if (fun1 ne fun) fun1
       else {
@@ -370,9 +371,38 @@ abstract class UnCurry extends InfoTransform with TypingTransformers {
             else Match(substTree(selector.duplicate), (cases map transformCase) ::: List(defaultCase))
           ))
         }
-          
+        def definedForMembers(): List[Tree] = {
+          val definedForMethod = anonClass.newMethod(fun.pos, "definedFor") setFlag FINAL
+          val definedForValue = anonClass.newValue(fun.pos, "_definedFor")
+
+          // find out result type of definedFor
+          val definedForDeclared = getMember(TranslucentFunctionClass, "definedFor")
+          val PolyType(noparams, definedForResType) = definedForDeclared.tpe
+          definedForMethod setInfo definedForDeclared.tpe
+          definedForValue setInfo definedForResType
+          anonClass.info.decls enter definedForMethod
+          anonClass.info.decls enter definedForValue
+
+          val Match(selector, cases) = fun.body
+          val caseTypes = cases map {
+            case CaseDef(pat, guard, body) => pat.tpe
+          }
+          val classOfTrees = caseTypes map { caseTpe =>
+            TypeApply(
+              Select(Ident(definitions.PredefModule), definitions.Predef_classOf),
+              List(Ident(caseTpe.typeSymbol))
+            )
+          }
+          val classOfList = Apply(Select(Ident("List"), definitions.List_apply), classOfTrees)
+
+          val valmem = ValDef(Modifiers(FINAL), "_definedFor", TypeTree(definedForResType), classOfList) setSymbol definedForValue
+          val defmem = DefDef(Modifiers(FINAL), "definedFor", List(), List(), TypeTree(definedForResType), Select(This(anonClass), definedForValue)) setSymbol definedForMethod
+          List(valmem, defmem)
+        }
+
         val members =
-          if (isPartial) List(applyMethodDef, isDefinedAtMethodDef)
+          if (isTranslucent) List(applyMethodDef, isDefinedAtMethodDef) ::: definedForMembers()
+          else if (isPartial) List(applyMethodDef, isDefinedAtMethodDef)
           else List(applyMethodDef)
 
         localTyper.typed {

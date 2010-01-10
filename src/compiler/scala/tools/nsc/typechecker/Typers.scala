@@ -1998,9 +1998,9 @@ trait Typers { self: Analyzer =>
             (pt.normalize.typeArgs.length - 1 == fun.vparams.length 
              || 
              fun.vparams.exists(_.tpt.isEmpty))) {
-          (if (pt.typeSymbol == TranslucentFunctionClass)
+          (/*if (pt.typeSymbol == TranslucentFunctionClass)
             PartialFunctionClass
-           else
+           else*/
             pt.typeSymbol, pt.normalize.typeArgs.init, pt.normalize.typeArgs.last)
         } else {
           (FunctionClass(fun.vparams.length), fun.vparams map (x => NoType), WildcardType)
@@ -2057,7 +2057,7 @@ trait Typers { self: Analyzer =>
         if (codeExpected) {
           val liftPoint = Apply(Select(Ident(CodeModule), nme.lift_), List(fun1))
           typed(atPos(fun.pos)(liftPoint))
-        } else if (translucentExpected) {
+        } /*else if (translucentExpected) {
           val pfName = unit.fresh.newName(fun.pos, "pf")
           val sym = context.owner.newValue(fun.pos, pfName).setFlag(SYNTHETIC).setInfo(funtpe)
           val firstExpr = typed(atPos(fun.pos)(ValDef(sym, fun1)))
@@ -2084,7 +2084,7 @@ trait Typers { self: Analyzer =>
 
           val transFunTpe = typeRef(pt.typeSymbol.tpe.prefix, pt.typeSymbol, formals ::: List(restpe))
           treeCopy.Block(fun, List(firstExpr), createTrans).setType(transFunTpe)
-        } else fun1
+        }*/ else fun1
       }
     }
 
