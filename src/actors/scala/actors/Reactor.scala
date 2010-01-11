@@ -53,7 +53,7 @@ trait Reactor extends OutputChannel[Any] {
   private[actors] val waitingForNone = new TranslucentFunctionWrapper[Any, Unit](new PartialFunction[Any, Unit] {
     def isDefinedAt(x: Any) = false
     def apply(x: Any) {}
-  }, List())
+  }, Array())
 
   // guarded by lock of this
   private[actors] var waitingFor: TranslucentFunction[Any, Any] = waitingForNone

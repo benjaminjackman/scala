@@ -387,16 +387,23 @@ abstract class UnCurry extends InfoTransform with TypingTransformers {
           val caseTypes = cases map {
             case CaseDef(pat, guard, body) => pat.tpe
           }
-          val classOfTrees = caseTypes map { caseTpe =>
-            TypeApply(
-              Select(Ident(definitions.PredefModule), definitions.Predef_classOf),
-              List(Ident(caseTpe.typeSymbol))
-            )
+          val classOfTrees = caseTypes flatMap { caseTpe =>
+            val superCase = if (caseTpe.typeSymbol.hasFlag(CASE))
+              Some(caseTpe.typeSymbol)
+            else // try to find case class in base classes
+              caseTpe.baseClasses.find(_.hasFlag(CASE))
+
+            if (superCase.isEmpty)
+              List()
+            else
+              List(
+                TypeApply(
+                  Select(Ident(definitions.PredefModule), definitions.Predef_classOf),
+                  List(Ident(superCase.get))
+                ))
           }
-          val classOfList = if (classOfTrees.size == 1)
-            classOfTrees(0)
-          else
-            Apply(Select(Ident("List"), definitions.List_apply), classOfTrees)
+          val classOfList =
+            Apply(Select(Ident("Array"), definitions.ArrayModule_apply), classOfTrees)
 
           val valmem = ValDef(Modifiers(FINAL), "_definedFor", TypeTree(definedForResType), classOfList) setSymbol definedForValue
           val defmem = DefDef(Modifiers(FINAL), "definedFor", List(), List(), TypeTree(definedForResType), Select(This(anonClass), definedForValue)) setSymbol definedForMethod

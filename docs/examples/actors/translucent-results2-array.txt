@@ -1,0 +1,39 @@
+echo $JAVA_OPTS
+-Xms512m -Xmx512m
+
+(1) 2.8-Beta1
+time scala -cp classes TCBenchmark producer-consumer 10000 100000 10000
+final results: 3769 11130 13208 19145 26614 38715 44630 56987 72559 86478
+
+real ~27m
+
+ratio last/first = 22.945
+
+(2) 2.8-Beta1, Explicit
+time scala -cp classes TCBenchmark producer-consumer-explicit 10000 100000 10000
+final results: 182 305 396 542 646 810 871 968 1120 1139
+
+real	0m45.012s
+user	0m46.231s
+sys	0m3.040s
+
+(3) translucent
+time scala -cp classes-uncurry TCBenchmark producer-consumer 10000 100000 10000
+final times:  323 424 589 751 903 1040 1493 1353 2031 1588
+final ratios: 61 70 67 66 66 67 53 66 49 69
+
+real	1m11.297s
+user	1m9.976s
+sys	0m2.012s
+
+(4) translucent-explicit
+time scala -cp classes-uncurry TCBenchmark producer-consumer-explicit 10000 100000 10000
+final times:  256 500 608 629 1139 1361 1602 1400 2178 1758
+final ratios: 78 60 65 79 52 51 49 64 45 62
+
+real	1m11.073s
+user	1m11.936s
+sys	0m2.484s
+
+(58% overhead compared to 2.8-Beta1-explicit.)
+

@@ -62,7 +62,7 @@ private[actors] class ReactChannel[Msg](receiver: Reactor) extends InputChannel[
         case SendToReactor(C, msg) if (f.isDefinedAt(msg.asInstanceOf[Msg])) =>
           f(msg.asInstanceOf[Msg])
       }
-      new TranslucentFunctionWrapper(pf, List(classOf[SendToReactor]))
+      new TranslucentFunctionWrapper(pf, Array(classOf[SendToReactor]))
     })
   }
 

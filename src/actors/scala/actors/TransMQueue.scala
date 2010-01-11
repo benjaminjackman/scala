@@ -21,7 +21,8 @@ private[actors] class TransMQueue(protected val label: String, var count: Int) {
   protected var last: TransMQueueElement = null  // last eq null iff list is empty
   private var _size = 0
   
-  protected val queueMap = new HashMap[Class[T] forSome { type T }, TransMQueue]
+  protected val queueMap = new HashMap[Class[_], TransMQueue]
+  protected var queueList = List[(Class[_], TransMQueue)]()
 
   def nextTime = { count += 1; count }
 
@@ -45,7 +46,16 @@ private[actors] class TransMQueue(protected val label: String, var count: Int) {
     /* if there is no queue for msgClass in queueMap, then
        either msgClass is not a case class or it has not yet been
        tried to received. In this case, append to global queue (this). */
-      queueMap.getOrElse(msgClass, this)
+      queueMap.getOrElse(msgClass, {
+        val cq = queueList.find(_._1.isAssignableFrom(msgClass))
+        if (cq.isEmpty)
+          this
+        else {
+          val q = cq.get._2
+          queueMap += (msgClass -> q)
+          q
+        }
+      })
     } else if (size > 1000) {
       enableTranslucent = true
       this
@@ -160,12 +170,18 @@ private[actors] class TransMQueue(protected val label: String, var count: Int) {
   }
 
   def foreachTagged(f: (Any, OutputChannel[Any]) => Unit) {
+/*
     val keyIter = queueMap.keysIterator
     while (keyIter.hasNext) {
       val key = keyIter.next
       val box = queueMap(key)
       box.foreach(f)
     }
+*/
+    queueList.foreach(cq => {
+      val queue = cq._2
+      queue.foreach(f)
+    })
     this.foreach(f)
   }
 
@@ -178,12 +194,18 @@ private[actors] class TransMQueue(protected val label: String, var count: Int) {
   }
 
   def foreachAppendToTagged(mbox: TransMQueue) {
+/*
     val keyIter = queueMap.keysIterator
     while (keyIter.hasNext) {
       val key = keyIter.next
       val box = queueMap(key)
       box.foreachAppendTo(mbox)
     }
+*/
+    queueList.foreach(cq => {
+      val queue = cq._2
+      queue.foreachAppendTo(mbox)
+    })
     this.foreachAppendTo(mbox)
   }
 
@@ -233,6 +255,8 @@ private[actors] class TransMQueue(protected val label: String, var count: Int) {
     val defFor = tf.definedFor
 
     if (enableTranslucent) {
+
+/*
     if (defFor.isInstanceOf[Class[_]]) {
       val clazz = defFor.asInstanceOf[Class[_]]
       val queue = queueMap.getOrElse(clazz, {
@@ -248,9 +272,10 @@ private[actors] class TransMQueue(protected val label: String, var count: Int) {
         bestQueue = queue
         earliest = found.get.time
       }
-    } else {
-      val defForList = defFor.asInstanceOf[List[Class[_]]]
-      if (defForList.isEmpty) { //TODO: replace with faster instanceof test?
+
+  } else*/ {
+//      val defForList = defFor.asInstanceOf[List[Class[_]]]
+      if (defFor.size == 0) { //TODO: replace with faster instanceof test?
         // (a) search through global queue (this)
         val found = this.findInternal(tf, earliest)
         if (!found.isEmpty) {
@@ -258,20 +283,23 @@ private[actors] class TransMQueue(protected val label: String, var count: Int) {
           earliest = found.get.time
         }
         // (b) search through all other queues
-        queueMap.values.foreach { queue =>
+        queueList.foreach { cq =>
+          val queue = cq._2
           val found = queue.findInternal(tf, earliest)
-                                 if (!found.isEmpty) {
-                                   bestQueue = queue
-                                   earliest = found.get.time
-                                 }
-                               }
-      } else defForList.foreach(clazz => {
+          if (!found.isEmpty) {
+            bestQueue = queue
+            earliest = found.get.time
+          }
+        }
+      } else defFor.foreach(clazz => {
         // Step 1: make sure for all classes in tf.definedFor exist separate queues
         // if necessary move messages from global queue (this) to new separate queues
         val queue = queueMap.getOrElse(clazz, {
           val newQueue = new TransMQueue
           moveClassTo(clazz, newQueue) // traverses global queue (this), moves messages
           queueMap += (clazz -> newQueue)
+          // also add to list of queues
+          queueList = (clazz, newQueue) :: queueList
           newQueue
         })
         //TODO: make findInternal return Nullable instead of Option

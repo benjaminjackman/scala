@@ -1,9 +1,9 @@
 package scala
 
-class TranslucentFunctionWrapper[T, +R](pf: PartialFunction[T, R], val definedFor: List[Class[S] forSome { type S }])
-  extends TranslucentFunction[T, R] {
-    def apply(x: T) =
-      pf(x)
-    def isDefinedAt(x: T) =
-      pf.isDefinedAt(x)
-  }
+class TranslucentFunctionWrapper[-A, +B](pf: PartialFunction[A, B],
+                                         val definedFor: Array[Class[_]]) extends TranslucentFunction[A, B] {
+  def apply(x: A) =
+    pf(x)
+  def isDefinedAt(x: A) =
+    pf.isDefinedAt(x)
+}
