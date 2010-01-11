@@ -36,13 +36,21 @@ private[actors] class TransMQueue(protected val label: String, var count: Int) {
     _size += diff
   }
 
+  var enableTranslucent = true
+
   def appendTagged(msg: Any, session: OutputChannel[Any]) {
-    val msgClass = msg.asInstanceOf[AnyRef].getClass
+    val queue = if (enableTranslucent) {
+      val msgClass = msg.asInstanceOf[AnyRef].getClass
 //    println("appending (class of "+msg+" is "+msgClass+")")
     /* if there is no queue for msgClass in queueMap, then
        either msgClass is not a case class or it has not yet been
        tried to received. In this case, append to global queue (this). */
-    val queue = queueMap.getOrElse(msgClass, this)
+      queueMap.getOrElse(msgClass, this)
+    } else if (size > 1000) {
+      enableTranslucent = true
+      this
+    } else
+      this
     queue.append(msg, session, nextTime)
   }
 
@@ -69,10 +77,15 @@ private[actors] class TransMQueue(protected val label: String, var count: Int) {
       while (keyIter.hasNext) {
         val key = keyIter.next
         val queue = other.queueMap(key)
-        queueMap(key).append(queue)
+        queueMap.get(key) match {
+          case None =>
+            println("BIG PROBLEM")
+            queueMap += (key -> queue)
+          case Some(subqueue) => subqueue.append(queue)
+        }
       }
     } catch {
-      case e: Exception => e.printStackTrace()
+      case e: Throwable => e.printStackTrace()
     }
   }
 
@@ -156,6 +169,24 @@ private[actors] class TransMQueue(protected val label: String, var count: Int) {
     this.foreach(f)
   }
 
+  def foreachAppendTo(mbox: TransMQueue) {
+    var curr = first
+    while (curr != null) {
+      mbox.appendTagged(curr.msg, curr.session)
+      curr = curr.next
+    }
+  }
+
+  def foreachAppendToTagged(mbox: TransMQueue) {
+    val keyIter = queueMap.keysIterator
+    while (keyIter.hasNext) {
+      val key = keyIter.next
+      val box = queueMap(key)
+      box.foreachAppendTo(mbox)
+    }
+    this.foreachAppendTo(mbox)
+  }
+
   def foldLeft[B](z: B)(f: (B, Any) => B): B = {
     var acc = z
     var curr = first
@@ -201,6 +232,7 @@ private[actors] class TransMQueue(protected val label: String, var count: Int) {
     var earliest = Integer.MAX_VALUE
     val defFor = tf.definedFor
 
+    if (enableTranslucent) {
     if (defFor.isInstanceOf[Class[_]]) {
       val clazz = defFor.asInstanceOf[Class[_]]
       val queue = queueMap.getOrElse(clazz, {
@@ -250,6 +282,14 @@ private[actors] class TransMQueue(protected val label: String, var count: Int) {
           earliest = found.get.time
         }
       })
+    }
+
+    } else {
+      val found = this.findInternal(tf, earliest)
+      if (!found.isEmpty) {
+        bestQueue = this
+        earliest = found.get.time
+      }
     }
 
     if (bestQueue != null)

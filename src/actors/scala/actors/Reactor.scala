@@ -151,7 +151,8 @@ trait Reactor extends OutputChannel[Any] {
     while (!done) {
       val qel = tmpMbox.extractFirst(handler)
       if (tmpMbox ne mailbox)
-        tmpMbox.foreachTagged((m, s) => mailbox.appendTagged(m, s))
+//        tmpMbox.foreachTagged((m, s) => mailbox.appendTagged(m, s))
+        tmpMbox.foreachAppendToTagged(mailbox)
 //        mailbox.appendTagged(tmpMbox)
       if (null eq qel) {
         synchronized {
